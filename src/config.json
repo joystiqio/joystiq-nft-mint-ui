@@ -1,0 +1,30 @@
+{
+  "name": "My project",
+  "description": "",
+  "website": "",
+  "socialX": "",
+  "discord": "",
+  "rpc": "https://fullnode.testnet.sui.io",
+  "network": "testnet",
+  "groups": [
+    {
+      "name": "public"
+    },
+    {
+      "name": "whitelist",
+      "allowlist": [
+        "0xa88a2dc9f13067ff1e779a5849945f80446925607b663c211db8020d698339c0",
+        "0xe8c90190303ae57c773ba12b83af5bb920f9d8364ba7c87b10132e6239e6895a"
+      ]
+    }
+  ],
+  "artifacts": {
+    "packageID": "",
+    "publisherID": "",
+    "collectionObjectID": "",
+    "collectionJqCoreConfigID": "",
+    "policyID": "",
+    "policyCapID": "",
+    "displayID": ""
+  }
+}
