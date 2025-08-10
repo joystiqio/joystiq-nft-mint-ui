@@ -19,18 +19,17 @@ import toast from "react-hot-toast"
 import { Transaction } from "@mysten/sui/transactions"
 import { MerkleTree } from 'merkletreejs';
 import MintedModal from "../components/mintedModal"
+import { Buffer } from 'buffer';
 
 const client = new SuiClient({
-    url: config.rpc || getFullnodeUrl("testnet"),
-    network: config.network || "testnet",
+    url: config.rpc || getFullnodeUrl(config.network as any),
+    network: config.network,
 });
 
-const JOYSTIQ_CORE = "0xdee6a2701e148576c687d5b15f53e57dd7205128f7a7c54fd7f87383b40445f1";
-const JOYSTIQ_CORE_ROOT = "0xa53664b81324f5663f36a713389730e1435f51419e353c3bca96b6658656f74f";
+const JOYSTIQ_CORE_TESTNET_ROOT = "0x0328d63fe460477e59e7499274c974d0719382884fcc2128ad1fbb3a7259f7e3";
+const JOYSTIQ_CORE_MAINNET_ROOT = "0x617b5bfab19d13a414c73f7ddaf711fa4d0bf39d6d252e8a56b62f447311c3d3";
 
-var phaseTimer: any = {}
-var phaseSwitch = false
-var interval: any = null
+const JOYSTIQ_CORE_ROOT = config.network === "mainnet" ? JOYSTIQ_CORE_MAINNET_ROOT : JOYSTIQ_CORE_TESTNET_ROOT;
 
 export default () => {
 
@@ -62,20 +61,34 @@ export default () => {
     const [mintedInfo, setMintedInfo] = useState<any>({})
     const [showMintedModal, setShowMintedModal] = useState(false)
 
+    const phaseTimerRef = useRef<{ name: string | null; timeout?: any }>({ name: null });
+    const phaseSwitchRef = useRef(false);
+    const intervalRef = useRef<any>(null);
+
+    const [fee, setFee] = useState("0");
+
+    const treeRef = useRef<Record<string, MerkleTree>>({});
+
     useEffect(() => {
         document.title = config.name
+
+        setTimeout(() => {
+            //refresh the page every 5 minutes
+            window.location.reload();
+        }, 300000);
     }, [])
 
     useEffect(() => {
         load()
-        return () => clearInterval(interval)
+        return () => clearInterval(intervalRef.current)
     }, [wallet])
 
     const load = async () => {
         refresh()
-        clearInterval(interval)
+        if (intervalRef.current)
+        clearInterval(intervalRef.current)
 
-        interval = setInterval(() => {
+        intervalRef.current = setInterval(() => {
             refresh()
         }, 5000)
     }
@@ -109,11 +122,16 @@ export default () => {
                 return
             }
 
+            setFee(root.data.content.fields.fee)
+
+            let collection = collectionObject.data.content.fields;
+
             let collectionData: any = {
-                supply: new BigNumber(collectionObject.data.content.fields.fixed_metadata ?
-                    collectionObject.data.content.fields.metadata_count === 0 ? -1 : collectionObject.data.content.fields.supply
-                    : collectionObject.data.content.fields.metadata_count_real),
-                mintedSupply: new BigNumber(collectionObject.data.content.fields.next_token_id).minus(new BigNumber(collectionObject.data.content.fields.starting_token_id)),
+                supply: new BigNumber(collection.fixed_metadata ?
+                    collection.supply === "0" ? -1 : collection.supply
+                    : collection.metadata_count_real
+                ),
+                mintedSupply: new BigNumber(collection.next_token_id).minus(new BigNumber(collection.starting_token_id)),
                 phases: [],
             }
 
@@ -125,8 +143,8 @@ export default () => {
                         collectionData.phases.push({
                             ...group,
                             groupIndex: j,
-                            start_time: parseInt(group.start_time),
-                            end_time: parseInt(group.end_time),
+                            start_time: parseInt(group.start_time) / 1000,
+                            end_time: parseInt(group.end_time) / 1000,
                             allowlist: groupConfig.allowlist,
                             max_mints_per_wallet: parseInt(group.max_mints_per_wallet),
                             reserved_supply: parseInt(group.reserved_supply),
@@ -222,8 +240,8 @@ export default () => {
             coinMetadataResults.forEach((metadata, index) => {
                 const coinAddress = coinAddresses[index];
                 updatedCoins[coinAddress] = {
-                    symbol: metadata.data?.symbol || "Unknown",
-                    decimals: metadata.data?.decimals
+                    symbol: metadata.symbol || "Unknown",
+                    decimals: metadata.decimals
                 };
             });
             setCoins(updatedCoins);
@@ -271,31 +289,31 @@ export default () => {
             currentPhase = closest
         }
 
-        if (phaseTimer.name !== currentPhase.name) {
-            if (phaseTimer.timeout) clearTimeout(phaseTimer.timeout)
+        if (phaseTimerRef.current.name !== currentPhase.name) {
+            if (phaseTimerRef.current.timeout) clearTimeout(phaseTimerRef.current.timeout)
 
             const now = new Date()
             const start = new Date(currentPhase.start_time)
             const end = new Date(currentPhase.end_time)
 
-            phaseTimer.name = currentPhase.name
+            phaseTimerRef.current.name = currentPhase.name
 
             if (now > start && now < end) {
                 if (end.getTime() - now.getTime() < 31536000000) {
-                    phaseTimer.timeout = setTimeout(() => {
+                    phaseTimerRef.current.timeout = setTimeout(() => {
                         refresh()
-                        phaseTimer.timeout = null
-                        phaseTimer.name = null
+                        phaseTimerRef.current.timeout = null
+                        phaseTimerRef.current.name = null
                     }, new Date(currentPhase.end_time).getTime() - new Date().getTime())
                 } else {
                     currentPhase.noend = true
                 }
             } else if (now < start) {
-                phaseTimer.timeout = setTimeout(() => {
+                phaseTimerRef.current.timeout = setTimeout(() => {
                     managePhases(phases)
                     refresh()
-                    phaseTimer.timeout = null
-                    phaseTimer.name = null
+                    phaseTimerRef.current.timeout = null
+                    phaseTimerRef.current.name = null
                 }, new Date(currentPhase.start_time).getTime() - new Date().getTime())
             } else if (now > end) {
                 //past phase
@@ -303,7 +321,7 @@ export default () => {
         }
 
         setPhases(phases)
-        if (!phaseSwitch) {
+        if (!phaseSwitchRef.current) {
             manageWhitelist(currentPhase)
             setCurrentPhase(currentPhase)
         }
@@ -333,7 +351,7 @@ export default () => {
 
         setCurrentPhase(phase)
         manageWhitelist(phase)
-        phaseSwitch = true
+        phaseSwitchRef.current = true
     }
 
     const incrementAmount = () => {
@@ -372,7 +390,7 @@ export default () => {
             return
         }
 
-        if (collection!.supply.isEqualTo(-1) && collection!.supply.minus(collection!.mintedSupply).isLessThan(amount)) {
+        if (!collection!.supply.isEqualTo(-1) && collection!.supply.minus(collection!.mintedSupply).isLessThan(amount)) {
             if (collection!.supply.minus(collection!.mintedSupply).isEqualTo(0)) {
                 toast.error("This collection is sold out")
             } else
@@ -410,16 +428,20 @@ export default () => {
 
             //allowlist
             if (currentPhase.merkle_root !== '' && currentPhase.merkle_root !== null) {
-                let hashedWallets = currentPhase.allowlist.map(keccak_256)
-                const tree = new MerkleTree(hashedWallets, keccak_256, { sortPairs: true })
+                const leaves = currentPhase.allowlist.map((a: any) => Buffer.from(keccak_256(Buffer.from(a.replace(/^0x/, '').padStart(64, '0'), 'hex'))));
+                if (!treeRef.current[currentPhase.merkle_root]) {
+                    treeRef.current[currentPhase.merkle_root] = new MerkleTree(leaves, (d: any) => Buffer.from(keccak_256(d)), { sortPairs: true });
+                }
                 let allowlist = currentPhase.allowlist.find((a: any) => a === wallet.address);
 
                 if (!allowlist) {
                     toast.error("You are not whitelisted for this phase")
+                    toast.dismiss(loading)
                     return;
                 }
 
-                let proof = tree.getProof(Buffer.from(keccak_256(wallet.address!))).map(element => Array.from(element.data))
+                const callerLeaf = Buffer.from(keccak_256(Buffer.from(wallet.address!.replace(/^0x/, '').padStart(64, '0'), 'hex')));
+                const proof = treeRef.current[currentPhase.merkle_root].getProof(callerLeaf).map(n => Array.from(n.data));
                 args.push(tx.pure.option("vector<vector<u8>>", proof))
             } else {
                 args.push(tx.pure.option("vector<vector<u8>>", null))
@@ -436,20 +458,24 @@ export default () => {
                 const coinType = currentPhase.payments[0].coin;
 
                 if (coinType === "0x2::sui::SUI") {
-                    args.push(tx.splitCoins(tx.gas, [tx.pure.u64(currentPhase.payments[0].total.multipliedBy(amount).toFixed(0))])[0]);
+                    let totalSui = currentPhase.payments[0].total.plus(fee).multipliedBy(amount).toFixed(0);
+                    args.push(tx.splitCoins(tx.gas, [tx.pure.u64(totalSui)])[0]);
                 } else {
                     const coinAmount = currentPhase.payments[0].total.multipliedBy(amount).toFixed(0);
 
                     const coins = await client.getCoins({ owner: wallet.address!, coinType });
                     if (coins.data.length === 0) {
                         toast.error(`You don't have any ${coinType} to pay`);
+                        toast.dismiss(loading)
                         return;
                     }
 
                     const coinId = coins.data[0].coinObjectId;
                     const splitCoin = tx.splitCoins(coinId, [tx.pure.u64(coinAmount)]);
-                    args.push(splitCoin);
+                    args.push(splitCoin[0]);
                 }
+
+                args.splice(2, 0, tx.object(JOYSTIQ_CORE_ROOT))
             } else { // 2 payments
                 target = `${config.artifacts.packageID}::jq721::mint_paid2`;
                 typeArguments.push(currentPhase.payments[0].coin);
@@ -458,38 +484,43 @@ export default () => {
                 // --- First Coin
                 const coinType1 = currentPhase.payments[0].coin;
                 if (coinType1 === "0x2::sui::SUI") {
-                    args.push(tx.splitCoins(tx.gas, [tx.pure.u64(currentPhase.payments[0].total.multipliedBy(amount).toFixed(0))])[0]);
+                    let totalSui = currentPhase.payments[0].total.plus(fee).multipliedBy(amount).toFixed(0);
+                    args.push(tx.splitCoins(tx.gas, [tx.pure.u64(totalSui)])[0]);
                 } else {
                     const coinAmount1 = currentPhase.payments[0].total.multipliedBy(amount).toFixed(0);
                     const coins1 = await client.getCoins({ owner: wallet.address!, coinType: coinType1 });
                     if (coins1.data.length === 0) {
                         toast.error(`You don't have any ${coinType1} to pay`);
+                        toast.dismiss(loading)
                         return;
                     }
                     const coinId1 = coins1.data[0].coinObjectId;
                     const splitCoin1 = tx.splitCoins(tx.object(coinId1), [tx.pure.u64(coinAmount1)]);
-                    args.push(splitCoin1);
+                    args.push(splitCoin1[0]);
                 }
 
                 // --- Second Coin
                 const coinType2 = currentPhase.payments[1].coin;
                 if (coinType2 === "0x2::sui::SUI") {
-                    args.push(tx.splitCoins(tx.gas, [tx.pure.u64(currentPhase.payments[0].total.multipliedBy(amount).toFixed(0))])[0]);
+                    let totalSui = currentPhase.payments[1].total.multipliedBy(amount).toFixed(0);
+                    args.push(tx.splitCoins(tx.gas, [tx.pure.u64(totalSui)])[0]);
                 } else {
                     const coinAmount2 = currentPhase.payments[1].total.multipliedBy(amount).toFixed(0);
                     const coins2 = await client.getCoins({ owner: wallet.address!, coinType: coinType2 });
                     if (coins2.data.length === 0) {
                         toast.error(`You don't have any ${coinType2} to pay`);
+                        toast.dismiss(loading)
                         return;
                     }
                     const coinId2 = coins2.data[0].coinObjectId;
                     const splitCoin2 = tx.splitCoins(tx.object(coinId2), [tx.pure.u64(coinAmount2)]);
-                    args.push(splitCoin2);
+                    args.push(splitCoin2[0]);
                 }
+
+                args.splice(2, 0, tx.object(JOYSTIQ_CORE_ROOT))
             }
 
-
-          
+            console.log(args)
 
             tx.moveCall({
                 target,
@@ -528,7 +559,7 @@ export default () => {
                 toast.dismiss(loading)
                 toast.error("Minting failed")
             } else {
-                verifyTransaction(config.rpc, res.digest).then(async (result) => {
+                verifyTransaction(config.rpc, res.digest).then(async () => {
                     toast.dismiss(loading)
 
                     let objects = await client.multiGetObjects({
@@ -538,8 +569,6 @@ export default () => {
                         }
                     })
 
-                    console.log("Minted Objects:", objects)
-
                     let nfts = objects.filter((obj: any) => obj.data.type === `${config.artifacts.packageID}::jq721::NFT`).map((obj) => obj.data?.objectId!)
 
                     let nftObjects = await client.multiGetObjects({
@@ -548,8 +577,6 @@ export default () => {
                             showContent: true,
                         }
                     })
-
-                    console.log("NFT Objects:", nftObjects)
                     let metadatas = nftObjects.map((obj: any) => {
                         return {
                             id: obj.data.objectId,
@@ -564,6 +591,7 @@ export default () => {
 
 
                 }).catch((error) => {
+                    console.error("Verification Error:", error)
                     toast.error("Mint Success, but verification failed")
                     toast.dismiss(loading)
                 })
@@ -572,7 +600,8 @@ export default () => {
 
 
         } catch (error: any) {
-            toast.error("Minting failed")
+            if (!error.message.includes("reject"))
+                toast.error("Minting failed")
             console.error("Minting Error:", error)
             toast.dismiss(loading)
         }
@@ -652,13 +681,17 @@ export default () => {
                                     <S.LaunchInfo>
                                         <S.TotalMintedInfo>
                                             <S.TotalMintedTitle>TOTAL MINT</S.TotalMintedTitle>
-                                            <S.TotalMintedValue><span>{(!collection.supply.eq(-1) && !collection.supply.eq(0)) ? Math.floor((collection.mintedSupply.div(collection.supply).times(100)).times(100).toNumber()) / 100 : 0}%</span>{formatBigNumber(collection.mintedSupply)}/{formatBigNumber(collection.supply)}</S.TotalMintedValue>
+                                            {collection.supply.isEqualTo(-1) ? (
+                                                <S.TotalMintedValue>{formatBigNumber(collection.mintedSupply)}/∞</S.TotalMintedValue>
+                                            ) : (
+                                                <S.TotalMintedValue><span>{Math.floor((collection.mintedSupply.div(collection.supply).times(100)).times(100).toNumber()) / 100}%</span>{formatBigNumber(collection.mintedSupply)}/{formatBigNumber(collection.supply)}</S.TotalMintedValue>
+                                            )}
                                         </S.TotalMintedInfo>
                                         {(!collection.supply.eq(-1) && !collection.supply.eq(0)) && (
                                             <Progress value={Math.floor((collection.mintedSupply.div(collection.supply).times(100).toNumber()) * 100) / 100} />
                                         )}
 
-                                        <S.PriceSection>
+                                        <S.PriceSection $multiple={(currentPhase.payments.length > 1 || (currentPhase.payments.length === 1 && !currentPhase.payments[0].allTransfer))}>
                                             {currentPhase.payments.length === 0 && (
                                                 <S.Price>
                                                     <S.PriceLabel>Price</S.PriceLabel>
@@ -669,7 +702,7 @@ export default () => {
                                                 <S.Price>
                                                     <S.PriceLabel>Price</S.PriceLabel>
                                                     <S.PriceValue>
-                                                        {currentPhase.payments[0].total.div(Math.pow(10, coins[currentPhase.payments[0].coin].decimals).toString()).toString()} {coins[currentPhase.payments[0].coin].symbol}
+                                                        {currentPhase.payments[0].total.div(new BigNumber(10).pow(coins[currentPhase.payments[0].coin].decimals).toString()).toString()} {coins[currentPhase.payments[0].coin].symbol}
                                                     </S.PriceValue>
                                                 </S.Price>
                                             )}
@@ -682,7 +715,7 @@ export default () => {
                                                                 const coin = coins[payment.coin];
                                                                 return (
                                                                     <span key={`${index}-${routeIndex}`}>
-                                                                        {route.amount.div(Math.pow(10, coin.decimals).toString())} <span>{coin.symbol} {route.method === "burn" ? "(Burn)" : ""}</span>
+                                                                        {route.amount.div(new BigNumber(10).pow(coin.decimals)).toString()} <span>{coin.symbol} {route.method === "burn" ? "(Burn)" : ""}</span>
                                                                     </span>
                                                                 )
                                                             })
@@ -756,10 +789,10 @@ export default () => {
                                                         const coin = coins[payment.coin];
                                                         return (
                                                             <span key={paymentIndex}>
-                                                                {payment.allTransfer && `${payment.total.div(Math.pow(10, coin.decimals).toString())} ${coin.symbol}`}
+                                                                {payment.allTransfer && `${payment.total.div(new BigNumber(10).pow(coin.decimals).toString()).toString()} ${coin.symbol}`}
                                                                 {!payment.allTransfer && payment.routes.map((route: any, routeIndex: number) => (
                                                                     <span key={routeIndex}>
-                                                                        {route.amount.div(Math.pow(10, coin.decimals).toString())} {coin.symbol} {route.method === "burn" ? "(Burn)" : ""}
+                                                                        {route.amount.div(new BigNumber(10).pow(coin.decimals)).toString()} {coin.symbol} {route.method === "burn" ? "(Burn)" : ""}
                                                                         {routeIndex < payment.routes.length - 1 && " • "}
                                                                     </span>
                                                                 ))}
@@ -803,15 +836,3 @@ export default () => {
         </S.Home>
     )
 }
-
-const getObjectRef = async (id: string) => {
-    const obj = await client.getObject({
-        id,
-        options: { showContent: true }
-    });
-    return {
-        objectId: obj.data!.objectId,
-        version: obj.data!.version,
-        digest: obj.data!.digest
-    };
-};

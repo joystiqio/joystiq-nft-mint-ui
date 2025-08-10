@@ -274,11 +274,15 @@ export const TotalMintedValue = styled.div`
     }
 `
 
-export const PriceSection = styled.div`
+export const PriceSection = styled.div<{$multiple?: boolean}>`
     margin-top: 24px;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
+
+    ${props => props.$multiple && `
+        align-items: center;
+    `}
 `
 
 export const Price = styled.div`
@@ -304,15 +308,21 @@ export const PriceMultiple = styled.div`
 
 export const PriceMultipleItem = styled.div`
     display:flex;
-    padding: 6px;
-    border-radius:8px;
-    background-color: ${color.neutral0};
-    color:${color.neutral5};
-    font-weight:500;
-    margin-top:8px;
+    flex-wrap:wrap;
+    gap:8px;
+    
+    & > span{
+        padding: 6px;
+        border-radius:8px;
+        background-color: ${color.neutral0};
+    }
+
     & span{
-        
-        margin-left:4px;
+        color:${color.neutral5};
+        font-weight:500;
+        font-family: "Tiny5";
+        font-size: 14px;
+        white-space: nowrap;
     }
 `
 
