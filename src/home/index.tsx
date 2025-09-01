@@ -20,14 +20,15 @@ import { Transaction } from "@mysten/sui/transactions"
 import { MerkleTree } from 'merkletreejs';
 import MintedModal from "../components/mintedModal"
 import { Buffer } from 'buffer';
+import { SignedTransaction } from "@mysten/wallet-standard"
 
 const client = new SuiClient({
     url: config.rpc || getFullnodeUrl(config.network as any),
     network: config.network,
 });
 
-const JOYSTIQ_CORE_TESTNET_ROOT = "0x0328d63fe460477e59e7499274c974d0719382884fcc2128ad1fbb3a7259f7e3";
-const JOYSTIQ_CORE_MAINNET_ROOT = "0x617b5bfab19d13a414c73f7ddaf711fa4d0bf39d6d252e8a56b62f447311c3d3";
+const JOYSTIQ_CORE_TESTNET_ROOT = "0xab7c93f04a96463af1cb257fecc50b9bf41bb0e2bcbafef250a3b8cf9d2b55d4";
+const JOYSTIQ_CORE_MAINNET_ROOT = "0x9e12a19292d42b4161778d4086d44489f1deb2c1b60813d0fc3f85b1150d22cf";
 
 const JOYSTIQ_CORE_ROOT = config.network === "mainnet" ? JOYSTIQ_CORE_MAINNET_ROOT : JOYSTIQ_CORE_TESTNET_ROOT;
 
@@ -86,7 +87,7 @@ export default () => {
     const load = async () => {
         refresh()
         if (intervalRef.current)
-        clearInterval(intervalRef.current)
+            clearInterval(intervalRef.current)
 
         intervalRef.current = setInterval(() => {
             refresh()
@@ -165,7 +166,7 @@ export default () => {
     }
 
     const managePhases = async (phases: any[]) => {
-        let currentPhase = null;
+        let currentPhase: any = null;
         let paymentTasks: { groupIndex: number, paymentIndex: number, key: string }[] = [];
 
         for (let i = 0; i < phases.length; i++) {
@@ -273,7 +274,7 @@ export default () => {
         }
 
         if (currentPhase === null) {
-            let closest = null
+            let closest: any = null
             for (let i = 0; i < phases.length; i++) {
                 let phase = phases[i]
                 let start = new Date(phase.start_time)
@@ -539,10 +540,18 @@ export default () => {
             const gasBudget = Number(estimatedGas * 12n / 10n);
 
             tx.setGasBudget(gasBudget);
-
-            let signed = await wallet.signTransaction({
-                transaction: tx
-            })
+            let signed: SignedTransaction;
+            if (wallet.adapter?.name == "Slush") {
+                signed = await wallet.adapter?.signTransaction({
+                    transaction: tx,
+                    chain: `sui:${config.network}`,
+                    account: wallet.account!
+                });
+            } else {
+                signed = await wallet.signTransaction({
+                    transaction: tx
+                })
+            }
 
             let res = await client.executeTransactionBlock({
                 transactionBlock: signed.bytes,

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import * as S from "./style"
 import confetti from "canvas-confetti"
 import config from "../../config.json"
+import { formatImageUrl } from "../../utils/helpers";
 
 const MintedModal = (props: any) => {
 
@@ -26,7 +27,7 @@ const MintedModal = (props: any) => {
                         <>
                             <S.NftSingle>
                                 <S.Nft href={`https://suiscan.xyz/${config.network}/object/${props.mints[0].id}`} target="_blank" rel="noopener noreferrer">
-                                    <S.NftImage src={props.mints[0].image}></S.NftImage>
+                                    <S.NftImage src={formatImageUrl(props.mints[0].image)}></S.NftImage>
                                     <S.NftTitle>
                                         {props.mints[0].name}
                                     </S.NftTitle>
@@ -39,7 +40,7 @@ const MintedModal = (props: any) => {
                         <S.Nfts>
                             {props.mints.map((mint: any, i: number) => (
                                 <S.Nft key={i} href={`https://suiscan.xyz/${config.network}/object/${mint.id}`} target="_blank" rel="noopener noreferrer">
-                                    <S.NftImage src={mint.image}></S.NftImage>
+                                    <S.NftImage src={formatImageUrl(mint.image)}></S.NftImage>
                                     <S.NftTitle>
                                         {mint.name}
                                     </S.NftTitle>

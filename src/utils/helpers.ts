@@ -1,5 +1,6 @@
 import BigNumber from "bignumber.js";
 import axios from "axios";
+import config from "../config.json"
 
 export const shortenPublicKey = (publicKey: string, len: number=5) => {
     if (!publicKey) return publicKey; 
@@ -64,3 +65,13 @@ export const verifyTransaction = async (rpc: string, digest: string) => {
     }
     throw new Error(`Transaction with digest ${digest} not found after ${maxRetries} retries.`);
 }
+
+export const formatImageUrl = (url: string) => {
+    if (url.startsWith("ar://")) {
+        return "https://arweave.net/" + url.slice(5);
+    }else if (url.startsWith("wal://")) {
+        return (config.network === "mainnet" ? "https://aggregator.walrus-mainnet.walrus.space/v1/blobs/" : "https://aggregator.walrus-testnet.walrus.space/v1/blobs/") + url.slice(6);
+    }
+
+    return url;
+};
